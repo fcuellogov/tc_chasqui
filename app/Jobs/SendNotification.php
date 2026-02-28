@@ -34,10 +34,9 @@ class SendNotification implements ShouldQueue
             $this->enviarSlack();
         }
         
-        // TODO: activar luego
-        //if ($this->canal == 'telegram'){ 
-        //     $this->sendToTelegram(); 
-        //}
+        if ($this->canal == 'telegram'){ 
+            $this->enviarTelegram(); 
+        }
     }
 
     protected function enviarSlack()
@@ -65,5 +64,26 @@ class SendNotification implements ShouldQueue
                 'footer'   => 'El Chasqui',
             ]]
         ]);
+    }
+
+    protected function enviarTelegram()
+    {
+        $token = config('sistema.telegram.token');
+        $chatId = config('sistema.telegram.chat_id');
+
+        // Armamos un mensaje con HTML para que sea bien legible
+        $html = "<b>🚀 NOVEDAD</b>\n";
+        $html .= "───────────────────\n";
+        $html .= "<b>🖥️ Sistema:</b> " . e(strtoupper($this->sistema)) . "\n";
+        $html .= "<b>📢 Mensaje:</b> " . e($this->mensaje) . "\n";
+        $html .= "<b>📊 Nivel:</b> #" . e(strtoupper($this->nivel));
+
+        $respuesta = Http::timeout(5)->post("https://api.telegram.org/bot{$token}/sendMessage", [
+            'chat_id' => $chatId,
+            'text' => $html,
+            'parse_mode' => 'HTML', 
+        ]);
+
+        dd($respuesta);
     }
 }
