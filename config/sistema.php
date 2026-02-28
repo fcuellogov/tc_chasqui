@@ -1,7 +1,5 @@
 <?php
 
-use Illuminate\Support\Str;
-
 return [
     'chasqui_key' => env('CHASQUI_API_KEY'),
     'slack' => [
