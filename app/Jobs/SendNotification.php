@@ -30,11 +30,11 @@ class SendNotification implements ShouldQueue
             default   => '#36C5F0', // Azul
         };
 
-        if (str_contains($this->canal, 'slack')) {
+        if (is_null($this->canal) || str_contains($this->canal, 'slack')) {
             $this->enviarSlack();
         }
         
-        if ($this->canal == 'telegram'){ 
+        if (is_null($this->canal) || $this->canal == 'telegram') { 
             $this->enviarTelegram(); 
         }
     }
@@ -78,12 +78,10 @@ class SendNotification implements ShouldQueue
         $html .= "<b>📢 Mensaje:</b> " . e($this->mensaje) . "\n";
         $html .= "<b>📊 Nivel:</b> #" . e(strtoupper($this->nivel));
 
-        $respuesta = Http::timeout(5)->post("https://api.telegram.org/bot{$token}/sendMessage", [
+        Http::timeout(5)->post("https://api.telegram.org/bot{$token}/sendMessage", [
             'chat_id' => $chatId,
             'text' => $html,
             'parse_mode' => 'HTML', 
         ]);
-
-        dd($respuesta);
     }
 }

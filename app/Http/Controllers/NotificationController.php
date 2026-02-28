@@ -11,7 +11,7 @@ class NotificationController extends Controller
     {
         $request->validate([
             'sistema' => 'required|string',
-            'canal' => 'required|string|in:slack,telegram',
+            'canal' => 'nullable|string|in:slack,telegram',
             'mensaje' => 'required|string',
             'nivel'   => 'required|string|in:error,success,info'
         ]);
