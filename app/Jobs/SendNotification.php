@@ -17,7 +17,7 @@ class SendNotification implements ShouldQueue
 
     public function __construct(
         public string $sistema,
-        public string $canal, // 'slack', 'telegram'
+        public ?string $canal, // 'slack', 'telegram'
         public string $mensaje,
         public string $nivel // 'error', 'success', 'info'
     ) {}
@@ -72,9 +72,7 @@ class SendNotification implements ShouldQueue
         $chatId = config('sistema.telegram.chat_id');
 
         // Armamos un mensaje con HTML para que sea bien legible
-        $html = "<b>🚀 NOVEDAD</b>\n";
-        $html .= "───────────────────\n";
-        $html .= "<b>🖥️ Sistema:</b> " . e(strtoupper($this->sistema)) . "\n";
+        $html = "<b>🖥️ Sistema:</b> " . e(strtoupper($this->sistema)) . "\n";
         $html .= "<b>📢 Mensaje:</b> " . e($this->mensaje) . "\n";
         $html .= "<b>📊 Nivel:</b> #" . e(strtoupper($this->nivel));
 
