@@ -10,6 +10,10 @@ return [
         'token' => env('TELEGRAM_API_KEY'),
         'chat_id' => env('TELEGRAM_CHAT_ID'),
     ],
+    'whatsapp' => [
+        'url' => env('WHATSAPP_URL'),
+        'token' => env('WHATSAPP_API_KEY'),
+    ],
     'servicios' => [
         ['nombre' => 'Personal', 'url' => 'https://personal.tccatamarca.online'],
         ['nombre' => 'Jefatura', 'url' => 'https://jefatura.tccatamarca.online'],

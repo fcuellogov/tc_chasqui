@@ -17,9 +17,10 @@ class SendNotification implements ShouldQueue
 
     public function __construct(
         public string $sistema,
-        public ?string $canal, // 'slack', 'telegram'
+        public ?string $canal,
         public string $mensaje,
-        public string $nivel // 'error', 'success', 'info'
+        public string $nivel,
+        public ?string $telefono = null
     ) {}
 
     public function handle()
@@ -36,6 +37,10 @@ class SendNotification implements ShouldQueue
         
         if (is_null($this->canal) || $this->canal == 'telegram') { 
             $this->enviarTelegram(); 
+        }
+
+        if (is_null($this->canal) || $this->canal == 'whatsapp') { 
+            $this->enviarWhatsapp(); 
         }
     }
 
@@ -81,5 +86,25 @@ class SendNotification implements ShouldQueue
             'text' => $html,
             'parse_mode' => 'HTML', 
         ]);
+    }
+    protected function enviarWhatsapp()
+    {
+        $token = config('sistema.whatsapp.token');
+        $url   = config('sistema.whatsapp.url');
+
+        $texto = "🖥️ *Sistema:* " . strtoupper($this->sistema) . "\n";
+        $texto .= "📢 *Mensaje:* " . $this->mensaje . "\n";
+        $texto .= "📊 *Nivel:* " . strtoupper($this->nivel);
+
+        Http::timeout(5)->connectTimeout(2)
+                ->withHeaders([
+                    'x-api-key' => $token,
+                    'Accept'    => 'application/json',
+                ])
+                ->asForm()
+                ->post($url, [
+                    'numeroTelefono' => $this->telefono,
+                    'mensaje'        => $texto,
+                ]);
     }
 }
