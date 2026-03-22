@@ -39,7 +39,7 @@ class SendNotification implements ShouldQueue
             $this->enviarTelegram(); 
         }
 
-        if (is_null($this->canal) || $this->canal == 'whatsapp') { 
+        if (is_null($this->canal) || ($this->canal == 'whatsapp') && !is_null($this->telefono)) { 
             $this->enviarWhatsapp(); 
         }
     }
@@ -87,6 +87,7 @@ class SendNotification implements ShouldQueue
             'parse_mode' => 'HTML', 
         ]);
     }
+    
     protected function enviarWhatsapp()
     {
         $token = config('sistema.whatsapp.token');
