@@ -17,10 +17,12 @@ class SendNotification implements ShouldQueue
 
     public function __construct(
         public string $sistema,
-        public ?string $canal,
+        public ?string $canal = null,
         public string $mensaje,
         public string $nivel,
-        public ?string $telefono = null
+        public ?string $telefono = null,
+        public ?array $destinatarios = [],
+        public ?string $asunto = null,
     ) {}
 
     public function handle()
@@ -41,6 +43,10 @@ class SendNotification implements ShouldQueue
 
         if (is_null($this->canal) || ($this->canal == 'whatsapp') && !is_null($this->telefono)) { 
             $this->enviarWhatsapp(); 
+        }
+
+        if (is_null($this->canal) || ($this->canal == 'mailrelay' && !empty($this->destinatarios))) {
+            $this->enviarMailrelay();
         }
     }
 
@@ -107,5 +113,89 @@ class SendNotification implements ShouldQueue
                     'numeroTelefono' => $this->telefono,
                     'mensaje'        => $texto,
                 ]);
+    }
+
+    protected function enviarMailrelay()
+    {
+        $destinatariosNormalizados = array_map('trim', $this->destinatarios);
+        
+        $correosValidos = array_filter($destinatariosNormalizados, function($email) {
+            return filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
+        });
+
+        $correosInvalidos = array_diff($destinatariosNormalizados, $correosValidos);
+
+        if (!empty($correosInvalidos)) {
+            $mensaje = "Se intentó enviar una notificación desde {$this->sistema} pero se detectaron " . count($correosInvalidos) . " direcciones inválidas.";
+            $mensaje .= " Direcciónes inválidas: " . implode(", ", $correosInvalidos);
+            $this->enviarErroresMailRelay($mensaje);
+            Log::warning("Chasqui [Mailrelay]: Se descartaron correos con formato inválido.", [
+                'sistema_origen' => $this->sistema,
+                'cantidad'       => count($correosInvalidos),
+                'lista_errores'  => array_values($correosInvalidos)
+            ]);
+        }
+
+        $totalOriginal = count($destinatariosNormalizados);
+        $totalValidos = count($correosValidos);
+        $descartados = count($correosInvalidos);
+
+        if ($totalValidos === 0) {
+            Log::warning("Chasqui [Mailrelay]: Abortando envío. No se encontraron correos válidos de {$totalOriginal} recibidos. Sistema: {$this->sistema}");
+            return;
+        }
+
+        if ($descartados > 0) {
+            Log::info("Chasqui [Mailrelay]: Se descartaron {$descartados} correos inválidos del sistema {$this->sistema}.");
+        }
+
+        $destinatarios = array_map(fn($email) => ['email' => trim($email)], array_values($correosValidos));
+
+        $token = config('sistema.mailrelay.token');
+        $url   = config('sistema.mailrelay.url');
+
+        $payload = [
+            'from' => [
+                'email' => config('sistema.mailrelay.from.address'),
+                'name'  => config('sistema.mailrelay.from.name')
+            ],
+            'to' => $destinatarios,
+            'subject' => $this->asunto,
+            'html_part' => $this->mensaje,
+        ];
+
+        Http::timeout(10)->connectTimeout(3)
+            ->withHeaders([
+                'X-AUTH-TOKEN' => $token,
+                'Content-Type' => 'application/json',
+            ])
+            ->post($url, $payload);
+    }
+
+    protected function enviarErroresMailRelay($mensaje)
+    {
+        $webhook = match($this->nivel) {
+            'error' => config('sistema.slack.errores_url'),
+            'success' => config('sistema.slack.alertas_url'),
+            default   => config('sistema.slack.alertas_url'),
+        };
+
+        Http::post($webhook, [
+            'attachments' => [[
+                'fallback' => "Nuevo aviso de {$this->sistema}",
+                'color'    => $this->color,
+                'pretext'  => "*Error al enviar mails masivos*",
+                'author_name' => "🖥️ Microservicio: " . strtoupper($this->sistema),
+                'text'     => $mensaje,
+                'fields'   => [
+                    [
+                        'title' => '📊 Nivel',
+                        'value' => strtoupper($this->nivel),
+                        'short' => true
+                    ],
+                ],
+                'footer'   => 'El Chasqui',
+            ]]
+        ]);
     }
 }
