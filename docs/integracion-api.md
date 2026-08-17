@@ -22,7 +22,7 @@ Chasqui es el servicio central de notificaciones del entorno. Los sistemas (Pers
 https://<host-interno-de-chasqui>/api
 ```
 
-Chasqui vive en un entorno aislado (k8s), sin ruta pública. Pedile a infraestructura/Franco la URL interna real para tu entorno — los ejemplos de esta guía usan rutas relativas (`/api/notificar`, etc.) sobre esa base.
+Chasqui vive en un entorno aislado (k8s), sin ruta pública. Pedile a infraestructura la URL interna real para tu entorno — los ejemplos de esta guía usan rutas relativas (`/api/notificar`, etc.) sobre esa base.
 
 ## 2. Autenticación
 
@@ -32,9 +32,9 @@ Cada sistema tiene **su propia clave**, no hay una clave compartida. Se envía e
 X-Chasqui-Key: <tu-clave>
 ```
 
-- La clave identifica a tu sistema. **No hace falta (ni se debe) mandar el nombre del sistema en el body** — Chasqui ya sabe quién sos por la clave.
+- La clave identifica a tu sistema. **No hace falta (ni se debe) mandar el nombre del sistema** — Chasqui ya sabe quién sos por la clave.
 - Si te falta el header, la clave no existe, o está fuera de su ventana de vigencia (`fecha_desde` / `fecha_hasta`), la respuesta es `401`.
-- Si no tenés tu clave o necesitás una nueva, pedísela a quien administra Chasqui — se genera una por sistema y solo se muestra una vez al crearla.
+- Si no tenés tu clave o necesitás una nueva, pedísela a quien administra Chasqui.
 
 ```json
 // 401 — clave inválida, vencida o ausente
@@ -49,14 +49,6 @@ Hay un límite de requests por minuto por IP de origen (120/min por defecto, pue
 // 429
 { "message": "Too Many Attempts." }
 ```
-
-Headers de la respuesta que te sirven para manejar esto:
-
-| Header | Qué indica |
-|---|---|
-| `X-RateLimit-Limit` | Límite configurado por minuto |
-| `X-RateLimit-Remaining` | Cuántas te quedan en la ventana actual |
-| `Retry-After` | Segundos hasta que puedas reintentar |
 
 ## 4. Enviar una notificación
 
@@ -164,11 +156,11 @@ Si la petición es válida, Chasqui responde **inmediatamente** con `202` — la
 
 La respuesta `202` es instantánea (validación + guardado en base, nada más) — no significa que el mensaje ya salió. Internamente:
 
-1. Chasqui guarda la petición y te devuelve el `id` al toque.
+1. Chasqui guarda la petición y te devuelve el `id` al instante.
 2. Un worker en segundo plano toma la petición de la cola y la procesa: llama a Slack/Telegram/WhatsApp/Mailrelay según corresponda (en paralelo entre sí, no uno detrás del otro).
-3. En condiciones normales esto tarda milisegundos a un par de segundos. **En el peor caso — un canal lento o caído — hasta ~10 segundos**, que es el timeout máximo configurado por canal antes de darlo por fallido.
+3. En condiciones normales esto tarda milisegundos a un par de segundos. **En el peor caso — un canal lento o caído — hasta ~20 segundos**, que es el timeout máximo configurado por canal antes de darlo por fallido.
 
-Si te importa saber si realmente se entregó (no solo que fue aceptado), no lo asumas por el `202`: consultá el `id` unos segundos después contra el endpoint de auditoría.
+Si te importa saber si realmente se entregó (no solo que fue aceptado), no lo asumas por el `202`: consultá el `id` unos minutos después contra el endpoint de auditoría.
 
 ## 6. Consultar el resultado de una petición
 
