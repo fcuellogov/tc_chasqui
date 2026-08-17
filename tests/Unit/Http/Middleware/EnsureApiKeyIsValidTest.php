@@ -4,38 +4,65 @@ namespace Tests\Unit\Http\Middleware;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Tests\Concerns\CreaApiClients;
 use Tests\TestCase;
 
 class EnsureApiKeyIsValidTest extends TestCase
 {
-    use RefreshDatabase;
+    use RefreshDatabase, CreaApiClients;
 
-
-    public function test_rechaza_si_la_clave_configurada_esta_vacia_aunque_el_header_tambien_lo_este(): void
+    protected function payload(): array
     {
-        Http::fake();
-        config(['sistema.chasqui_key' => null]);
-
-        $response = $this->postJson('/api/notificar', [
-            'sistema' => 'personal',
-            'mensaje' => 'hola',
-            'nivel'   => 'info',
-        ], ['X-Chasqui-Key' => '']);
-
-        $response->assertStatus(401);
+        return ['mensaje' => 'hola', 'nivel' => 'info'];
     }
 
-    public function test_acepta_con_la_clave_correcta(): void
+    public function test_rechaza_sin_header(): void
     {
         Http::fake();
-        config(['sistema.chasqui_key' => 'clave-de-test']);
 
-        $response = $this->postJson('/api/notificar', [
-            'sistema' => 'personal',
-            'mensaje' => 'hola',
-            'nivel'   => 'info',
-        ], ['X-Chasqui-Key' => 'clave-de-test']);
+        $this->postJson('/api/notificar', $this->payload())->assertStatus(401);
+    }
 
-        $response->assertStatus(202);
+    public function test_rechaza_clave_desconocida(): void
+    {
+        Http::fake();
+
+        $this->postJson('/api/notificar', $this->payload(), ['X-Chasqui-Key' => 'clave-inexistente'])
+            ->assertStatus(401);
+    }
+
+    public function test_rechaza_clave_vencida(): void
+    {
+        Http::fake();
+
+        [, $clave] = $this->crearApiClient([
+            'fecha_desde' => now()->subMonths(2)->toDateString(),
+            'fecha_hasta' => now()->subDay()->toDateString(),
+        ]);
+
+        $this->postJson('/api/notificar', $this->payload(), ['X-Chasqui-Key' => $clave])
+            ->assertStatus(401);
+    }
+
+    public function test_rechaza_clave_que_todavia_no_es_valida(): void
+    {
+        Http::fake();
+
+        [, $clave] = $this->crearApiClient([
+            'fecha_desde' => now()->addDay()->toDateString(),
+        ]);
+
+        $this->postJson('/api/notificar', $this->payload(), ['X-Chasqui-Key' => $clave])
+            ->assertStatus(401);
+    }
+
+    public function test_acepta_clave_valida(): void
+    {
+        Http::fake();
+
+        [, $clave] = $this->crearApiClient();
+
+        $this->postJson('/api/notificar', $this->payload(), ['X-Chasqui-Key' => $clave])
+            ->assertStatus(202);
     }
 }

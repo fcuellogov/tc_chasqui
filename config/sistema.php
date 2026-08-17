@@ -1,7 +1,6 @@
 <?php
 
 return [
-    'chasqui_key' => env('CHASQUI_API_KEY'),
     'rate_limit_por_minuto' => env('CHASQUI_RATE_LIMIT_POR_MINUTO', 120),
     'slack' => [
         'errores_url' => env('SLACK_ERRORES_URL'),

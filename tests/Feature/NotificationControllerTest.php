@@ -7,23 +7,30 @@ use App\Models\NotificationRequest;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Http;
+use Tests\Concerns\CreaApiClients;
 use Tests\TestCase;
 
 class NotificationControllerTest extends TestCase
 {
-    use RefreshDatabase;
+    use RefreshDatabase, CreaApiClients;
+
+    protected string $clave;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        [, $this->clave] = $this->crearApiClient(['sistema' => 'salud']);
+    }
 
     protected function headers(array $overrides = []): array
     {
-        return array_merge([
-            'X-Chasqui-Key' => config('sistema.chasqui_key'),
-        ], $overrides);
+        return array_merge(['X-Chasqui-Key' => $this->clave], $overrides);
     }
 
     public function test_rechaza_sin_api_key_valida(): void
     {
         $response = $this->postJson('/api/notificar', [
-            'sistema' => 'personal',
             'mensaje' => 'hola',
             'nivel'   => 'info',
         ], $this->headers(['X-Chasqui-Key' => 'clave-incorrecta']));
@@ -36,13 +43,12 @@ class NotificationControllerTest extends TestCase
         $response = $this->postJson('/api/notificar', [], $this->headers());
 
         $response->assertStatus(422)
-            ->assertJsonValidationErrors(['sistema', 'mensaje', 'nivel']);
+            ->assertJsonValidationErrors(['mensaje', 'nivel']);
     }
 
     public function test_rechaza_canal_no_registrado(): void
     {
         $response = $this->postJson('/api/notificar', [
-            'sistema' => 'personal',
             'canal'   => 'sms',
             'mensaje' => 'hola',
             'nivel'   => 'info',
@@ -55,7 +61,6 @@ class NotificationControllerTest extends TestCase
     public function test_canal_whatsapp_requiere_telefono(): void
     {
         $response = $this->postJson('/api/notificar', [
-            'sistema' => 'personal',
             'canal'   => 'whatsapp',
             'mensaje' => 'hola',
             'nivel'   => 'info',
@@ -68,7 +73,6 @@ class NotificationControllerTest extends TestCase
     public function test_canal_mailrelay_requiere_destinatarios_y_asunto(): void
     {
         $response = $this->postJson('/api/notificar', [
-            'sistema' => 'personal',
             'canal'   => 'mailrelay',
             'mensaje' => 'hola',
             'nivel'   => 'info',
@@ -78,12 +82,11 @@ class NotificationControllerTest extends TestCase
             ->assertJsonValidationErrors(['destinatarios', 'asunto']);
     }
 
-    public function test_crea_el_registro_de_auditoria_y_encola_el_job_con_su_id(): void
+    public function test_crea_el_registro_de_auditoria_con_el_sistema_del_cliente_autenticado(): void
     {
         Bus::fake();
 
         $response = $this->postJson('/api/notificar', [
-            'sistema'    => 'salud',
             'canal'      => 'whatsapp',
             'mensaje'    => 'recordatorio',
             'nivel'      => 'info',
@@ -117,6 +120,28 @@ class NotificationControllerTest extends TestCase
         });
     }
 
+    public function test_ignora_el_sistema_que_venga_en_el_body_y_usa_el_del_cliente_autenticado(): void
+    {
+        Bus::fake();
+
+        $response = $this->postJson('/api/notificar', [
+            'sistema' => 'un-sistema-inventado',
+            'mensaje' => 'hola',
+            'nivel'   => 'info',
+        ], $this->headers());
+
+        $response->assertStatus(202);
+
+        $this->assertDatabaseHas('notification_requests', [
+            'id'      => $response->json('id'),
+            'sistema' => 'salud',
+        ]);
+
+        $this->assertDatabaseMissing('notification_requests', [
+            'sistema' => 'un-sistema-inventado',
+        ]);
+    }
+
     public function test_limita_la_cantidad_de_solicitudes_por_minuto(): void
     {
         Http::fake();
@@ -124,14 +149,12 @@ class NotificationControllerTest extends TestCase
 
         for ($i = 0; $i < 2; $i++) {
             $this->postJson('/api/notificar', [
-                'sistema' => 'personal',
                 'mensaje' => 'hola',
                 'nivel'   => 'info',
             ], $this->headers())->assertStatus(202);
         }
 
         $this->postJson('/api/notificar', [
-            'sistema' => 'personal',
             'mensaje' => 'hola',
             'nivel'   => 'info',
         ], $this->headers())->assertStatus(429);
@@ -142,7 +165,6 @@ class NotificationControllerTest extends TestCase
         Http::fake();
 
         $response = $this->postJson('/api/notificar', [
-            'sistema' => 'personal',
             'mensaje' => 'hola a todos',
             'nivel'   => 'error',
         ], $this->headers());

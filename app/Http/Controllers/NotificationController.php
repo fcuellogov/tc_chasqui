@@ -11,8 +11,9 @@ class NotificationController extends Controller
 {
     public function index(Request $request)
     {
+        $cliente = $request->attributes->get('api_client');
+
         $rules = array_merge([
-            'sistema' => 'required|string',
             'canal'   => 'nullable|string|in:' . implode(',', ChannelRegistry::keys()),
             'mensaje' => 'required|string',
             'nivel'   => 'required|string|in:error,success,info',
@@ -23,7 +24,7 @@ class NotificationController extends Controller
         $datos = ChannelRegistry::extractDatos($validated);
 
         $notificationRequest = NotificationRequest::create([
-            'sistema'   => $validated['sistema'],
+            'sistema'   => $cliente->sistema,
             'canal'     => $validated['canal'] ?? null,
             'mensaje'   => $validated['mensaje'],
             'nivel'     => $validated['nivel'],
