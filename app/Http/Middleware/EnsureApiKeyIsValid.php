@@ -10,9 +10,10 @@ class EnsureApiKeyIsValid
 {
     public function handle(Request $request, Closure $next)
     {
-        $apiKey = $request->header('X-Chasqui-Key');
+        $claveConfigurada = (string) config('sistema.chasqui_key');
+        $claveRecibida = (string) $request->header('X-Chasqui-Key');
 
-        if ($apiKey !== config('sistema.chasqui_key')) {
+        if ($claveConfigurada === '' || !hash_equals($claveConfigurada, $claveRecibida)) {
             return response()->json(['error' => 'No autorizado.'], 401);
         }
 

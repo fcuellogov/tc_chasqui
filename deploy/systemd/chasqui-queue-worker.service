@@ -1,0 +1,14 @@
+[Unit]
+Description=Chasqui - worker de cola de notificaciones
+After=network.target mysql.service
+
+[Service]
+User=franco
+Group=franco
+WorkingDirectory=/var/www/html/tc/chasqui
+ExecStart=/usr/bin/php artisan queue:work --queue=default --tries=1 --max-jobs=1000 --max-time=3600 --sleep=1
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
