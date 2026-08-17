@@ -3,6 +3,7 @@
 namespace App\Notifications\Chasqui\Channels;
 
 use App\Notifications\Chasqui\NotificationPayload;
+use App\Notifications\Chasqui\ResultadoEnvio;
 use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Log;
@@ -19,7 +20,7 @@ class WhatsappChannel implements ChannelContract
         return !empty($payload->dato('telefono'));
     }
 
-    public function enqueue(Pool $pool, NotificationPayload $payload): bool
+    public function enqueue(Pool $pool, NotificationPayload $payload): ?ResultadoEnvio
     {
         $request = $pool->as(static::key())
             ->withHeaders([
@@ -44,10 +45,10 @@ class WhatsappChannel implements ChannelContract
             ]);
         }
 
-        return true;
+        return null;
     }
 
-    public function handleResponse(NotificationPayload $payload, Response|\Throwable $response): void
+    public function handleResponse(NotificationPayload $payload, Response|\Throwable $response): ResultadoEnvio
     {
         if ($response instanceof \Throwable) {
             Log::warning('Chasqui [Whatsapp/OpenWA]: excepción al enviar.', [
@@ -55,7 +56,7 @@ class WhatsappChannel implements ChannelContract
                 'error'   => $response->getMessage(),
             ]);
 
-            return;
+            return ResultadoEnvio::fallido($response->getMessage());
         }
 
         if ($response->failed()) {
@@ -64,7 +65,11 @@ class WhatsappChannel implements ChannelContract
                 'status'  => $response->status(),
                 'body'    => $response->body(),
             ]);
+
+            return ResultadoEnvio::fallido($response->body(), $response->status());
         }
+
+        return ResultadoEnvio::enviado($response->status());
     }
 
     protected function endpoint(string $accion): string

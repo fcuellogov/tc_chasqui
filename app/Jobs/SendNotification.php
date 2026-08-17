@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Notifications\Chasqui\ChannelRegistry;
+use App\Notifications\Chasqui\NotificationAuditor;
 use App\Notifications\Chasqui\NotificationPayload;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -15,6 +16,7 @@ class SendNotification implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public function __construct(
+        public string $notificationRequestId,
         public string $sistema,
         public ?string $canal,
         public string $mensaje,
@@ -24,12 +26,14 @@ class SendNotification implements ShouldQueue
 
     public function handle(): void
     {
-        ChannelRegistry::dispatch(new NotificationPayload(
+        $resultados = ChannelRegistry::dispatch(new NotificationPayload(
             sistema: $this->sistema,
             canal: $this->canal,
             mensaje: $this->mensaje,
             nivel: $this->nivel,
             datos: $this->datos,
         ));
+
+        NotificationAuditor::registrar($this->notificationRequestId, $resultados);
     }
 }

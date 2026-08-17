@@ -3,12 +3,16 @@
 namespace Tests\Feature;
 
 use App\Jobs\SendNotification;
+use App\Models\NotificationRequest;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class NotificationControllerTest extends TestCase
 {
+    use RefreshDatabase;
+
     protected function headers(array $overrides = []): array
     {
         return array_merge([
@@ -74,25 +78,36 @@ class NotificationControllerTest extends TestCase
             ->assertJsonValidationErrors(['destinatarios', 'asunto']);
     }
 
-    public function test_encola_el_job_con_los_datos_especificos_del_canal_agrupados(): void
+    public function test_crea_el_registro_de_auditoria_y_encola_el_job_con_su_id(): void
     {
         Bus::fake();
 
         $response = $this->postJson('/api/notificar', [
-            'sistema'   => 'salud',
-            'canal'     => 'whatsapp',
-            'mensaje'   => 'recordatorio',
-            'nivel'     => 'info',
-            'telefono'  => '5493834123456',
-            'template'  => 'recordatorio_turno',
+            'sistema'    => 'salud',
+            'canal'      => 'whatsapp',
+            'mensaje'    => 'recordatorio',
+            'nivel'      => 'info',
+            'telefono'   => '5493834123456',
+            'template'   => 'recordatorio_turno',
             'parametros' => ['nombre' => 'Juan'],
         ], $this->headers());
 
         $response->assertStatus(202)
-            ->assertJson(['status' => 'Encolado']);
+            ->assertJson(['status' => 'Encolado'])
+            ->assertJsonStructure(['status', 'id']);
 
-        Bus::assertDispatched(SendNotification::class, function (SendNotification $job) {
-            return $job->sistema === 'salud'
+        $id = $response->json('id');
+
+        $this->assertDatabaseHas('notification_requests', [
+            'id'      => $id,
+            'sistema' => 'salud',
+            'canal'   => 'whatsapp',
+            'estado'  => 'pendiente',
+        ]);
+
+        Bus::assertDispatched(SendNotification::class, function (SendNotification $job) use ($id) {
+            return $job->notificationRequestId === $id
+                && $job->sistema === 'salud'
                 && $job->canal === 'whatsapp'
                 && $job->datos === [
                     'telefono'   => '5493834123456',
@@ -122,7 +137,7 @@ class NotificationControllerTest extends TestCase
         ], $this->headers())->assertStatus(429);
     }
 
-    public function test_flujo_completo_envia_a_slack_cuando_no_se_especifica_canal(): void
+    public function test_flujo_completo_envia_a_slack_y_queda_auditado(): void
     {
         Http::fake();
 
@@ -137,5 +152,13 @@ class NotificationControllerTest extends TestCase
         Http::assertSent(function ($request) {
             return $request->url() === config('sistema.slack.errores_url');
         });
+
+        $id = $response->json('id');
+
+        $notificationRequest = NotificationRequest::find($id);
+
+        $this->assertNotNull($notificationRequest);
+        $this->assertSame('procesado', $notificationRequest->estado);
+        $this->assertTrue($notificationRequest->attempts()->where('canal', 'slack')->where('estado', 'enviado')->exists());
     }
 }

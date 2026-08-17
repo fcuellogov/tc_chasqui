@@ -2,11 +2,15 @@
 
 namespace Tests\Unit\Http\Middleware;
 
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class EnsureApiKeyIsValidTest extends TestCase
 {
+    use RefreshDatabase;
+
+
     public function test_rechaza_si_la_clave_configurada_esta_vacia_aunque_el_header_tambien_lo_este(): void
     {
         Http::fake();

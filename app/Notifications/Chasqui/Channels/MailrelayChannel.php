@@ -3,6 +3,7 @@
 namespace App\Notifications\Chasqui\Channels;
 
 use App\Notifications\Chasqui\NotificationPayload;
+use App\Notifications\Chasqui\ResultadoEnvio;
 use App\Notifications\Chasqui\SlackWebhook;
 use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Client\Response;
@@ -20,7 +21,7 @@ class MailrelayChannel implements ChannelContract
         return !empty($payload->dato('destinatarios'));
     }
 
-    public function enqueue(Pool $pool, NotificationPayload $payload): bool
+    public function enqueue(Pool $pool, NotificationPayload $payload): ?ResultadoEnvio
     {
         $destinatariosNormalizados = array_map('trim', $payload->dato('destinatarios', []));
 
@@ -50,7 +51,7 @@ class MailrelayChannel implements ChannelContract
         if ($totalValidos === 0) {
             Log::warning("Chasqui [Mailrelay]: Abortando envío. No se encontraron correos válidos de {$totalOriginal} recibidos. Sistema: {$payload->sistema}");
 
-            return false;
+            return ResultadoEnvio::fallido("No se encontraron correos válidos de {$totalOriginal} recibidos.");
         }
 
         if ($descartados > 0) {
@@ -75,10 +76,10 @@ class MailrelayChannel implements ChannelContract
                 'html_part' => $payload->mensaje,
             ]);
 
-        return true;
+        return null;
     }
 
-    public function handleResponse(NotificationPayload $payload, Response|\Throwable $response): void
+    public function handleResponse(NotificationPayload $payload, Response|\Throwable $response): ResultadoEnvio
     {
         if ($response instanceof \Throwable) {
             Log::warning('Chasqui [Mailrelay]: excepción al enviar.', [
@@ -86,7 +87,7 @@ class MailrelayChannel implements ChannelContract
                 'error'   => $response->getMessage(),
             ]);
 
-            return;
+            return ResultadoEnvio::fallido($response->getMessage());
         }
 
         if ($response->failed()) {
@@ -95,7 +96,11 @@ class MailrelayChannel implements ChannelContract
                 'status'  => $response->status(),
                 'body'    => $response->body(),
             ]);
+
+            return ResultadoEnvio::fallido($response->body(), $response->status());
         }
+
+        return ResultadoEnvio::enviado($response->status());
     }
 
     public static function rules(): array

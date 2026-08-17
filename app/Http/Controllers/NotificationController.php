@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Jobs\SendNotification;
+use App\Models\NotificationRequest;
 use App\Notifications\Chasqui\ChannelRegistry;
 use Illuminate\Http\Request;
 
@@ -19,14 +20,30 @@ class NotificationController extends Controller
 
         $validated = $request->validate($rules);
 
+        $datos = ChannelRegistry::extractDatos($validated);
+
+        $notificationRequest = NotificationRequest::create([
+            'sistema'   => $validated['sistema'],
+            'canal'     => $validated['canal'] ?? null,
+            'mensaje'   => $validated['mensaje'],
+            'nivel'     => $validated['nivel'],
+            'datos'     => $datos,
+            'ip_origen' => $request->ip(),
+            'estado'    => 'pendiente',
+        ]);
+
         SendNotification::dispatch(
-            $validated['sistema'],
-            $validated['canal'] ?? null,
-            $validated['mensaje'],
-            $validated['nivel'],
-            ChannelRegistry::extractDatos($validated),
+            $notificationRequest->id,
+            $notificationRequest->sistema,
+            $notificationRequest->canal,
+            $notificationRequest->mensaje,
+            $notificationRequest->nivel,
+            $datos,
         );
 
-        return response()->json(['status' => 'Encolado'], 202);
+        return response()->json([
+            'status' => 'Encolado',
+            'id'     => $notificationRequest->id,
+        ], 202);
     }
 }

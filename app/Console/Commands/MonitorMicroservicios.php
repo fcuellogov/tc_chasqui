@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Jobs\SendNotification;
+use App\Models\NotificationRequest;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Http;
 
@@ -30,10 +31,22 @@ class MonitorMicroservicios extends Command
 
     protected function alertar($nombre, $error)
     {
+        $mensaje = "🚨 EL MICROSERVICIO {$nombre} ESTÁ CAÍDO: \nDetalle: {$error}";
+
+        $notificationRequest = NotificationRequest::create([
+            'sistema' => 'Health Check',
+            'canal'   => null,
+            'mensaje' => $mensaje,
+            'nivel'   => 'error',
+            'estado'  => 'pendiente',
+        ]);
+
         SendNotification::dispatch(
-            'Health Check', 
-            null, 
-            "🚨 EL MICROSERVICIO {$nombre} ESTÁ CAÍDO: \nDetalle: {$error}", 
-            'error');
+            $notificationRequest->id,
+            'Health Check',
+            null,
+            $mensaje,
+            'error',
+        );
     }
 }

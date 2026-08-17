@@ -33,43 +33,58 @@ class ChannelRegistry
     }
 
     /**
-     * Filtra los canales aplicables y dispara sus requests HTTP concurrentemente
-     * (en vez de uno detrás del otro), así el tiempo total queda acotado por el
-     * canal más lento en vez de por la suma de todos.
+     * Filtra los canales en alcance (según el canal pedido), dispara sus
+     * requests HTTP concurrentemente y devuelve el resultado de cada uno
+     * (clave = nombre del canal), incluyendo los que se omitieron.
+     *
+     * @return array<string, ResultadoEnvio>
      */
-    public static function dispatch(NotificationPayload $payload): void
+    public static function dispatch(NotificationPayload $payload): array
     {
-        $activos = [];
+        $enAlcance = [];
 
         foreach (static::all() as $channel) {
             if (!is_null($payload->canal) && $payload->canal !== $channel::key()) {
                 continue;
             }
 
-            if (!$channel->shouldHandle($payload)) {
-                continue;
+            $enAlcance[$channel::key()] = $channel;
+        }
+
+        $resultados = [];
+        $activos = [];
+
+        foreach ($enAlcance as $clave => $channel) {
+            if ($channel->shouldHandle($payload)) {
+                $activos[$clave] = $channel;
+            } else {
+                $resultados[$clave] = ResultadoEnvio::omitido(
+                    'El canal no aplica: faltan los datos requeridos para esta notificación.'
+                );
             }
-
-            $activos[$channel::key()] = $channel;
         }
 
-        if (empty($activos)) {
-            return;
-        }
+        if (!empty($activos)) {
+            $enviados = [];
 
-        $enviados = [];
+            $respuestas = Http::pool(function (Pool $pool) use ($activos, $payload, &$enviados, &$resultados) {
+                foreach ($activos as $clave => $channel) {
+                    $resultado = $channel->enqueue($pool, $payload);
 
-        $respuestas = Http::pool(function (Pool $pool) use ($activos, $payload, &$enviados) {
-            foreach ($activos as $clave => $channel) {
-                if ($channel->enqueue($pool, $payload)) {
-                    $enviados[] = $clave;
+                    if ($resultado === null) {
+                        $enviados[] = $clave;
+                    } else {
+                        $resultados[$clave] = $resultado;
+                    }
                 }
-            }
-        }, concurrency: count($activos));
+            }, concurrency: count($activos));
 
-        foreach ($enviados as $clave) {
-            $activos[$clave]->handleResponse($payload, $respuestas[$clave]);
+            foreach ($enviados as $clave) {
+                $resultados[$clave] = $activos[$clave]->handleResponse($payload, $respuestas[$clave]);
+            }
         }
+
+        return $resultados;
     }
 
     public static function validationRules(): array

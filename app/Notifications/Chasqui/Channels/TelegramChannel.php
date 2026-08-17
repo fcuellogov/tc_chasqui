@@ -3,6 +3,7 @@
 namespace App\Notifications\Chasqui\Channels;
 
 use App\Notifications\Chasqui\NotificationPayload;
+use App\Notifications\Chasqui\ResultadoEnvio;
 use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Log;
@@ -19,7 +20,7 @@ class TelegramChannel implements ChannelContract
         return true;
     }
 
-    public function enqueue(Pool $pool, NotificationPayload $payload): bool
+    public function enqueue(Pool $pool, NotificationPayload $payload): ?ResultadoEnvio
     {
         $token = config('sistema.telegram.token');
         $chatId = config('sistema.telegram.chat_id');
@@ -36,10 +37,10 @@ class TelegramChannel implements ChannelContract
                 'parse_mode' => 'HTML',
             ]);
 
-        return true;
+        return null;
     }
 
-    public function handleResponse(NotificationPayload $payload, Response|\Throwable $response): void
+    public function handleResponse(NotificationPayload $payload, Response|\Throwable $response): ResultadoEnvio
     {
         if ($response instanceof \Throwable) {
             Log::warning('Chasqui [Telegram]: excepción al enviar.', [
@@ -47,7 +48,7 @@ class TelegramChannel implements ChannelContract
                 'error'   => $response->getMessage(),
             ]);
 
-            return;
+            return ResultadoEnvio::fallido($response->getMessage());
         }
 
         if ($response->failed()) {
@@ -55,7 +56,11 @@ class TelegramChannel implements ChannelContract
                 'sistema' => $payload->sistema,
                 'status'  => $response->status(),
             ]);
+
+            return ResultadoEnvio::fallido('Respuesta HTTP ' . $response->status(), $response->status());
         }
+
+        return ResultadoEnvio::enviado($response->status());
     }
 
     public static function rules(): array

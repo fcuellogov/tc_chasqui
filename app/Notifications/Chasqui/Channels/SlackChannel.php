@@ -3,6 +3,7 @@
 namespace App\Notifications\Chasqui\Channels;
 
 use App\Notifications\Chasqui\NotificationPayload;
+use App\Notifications\Chasqui\ResultadoEnvio;
 use App\Notifications\Chasqui\SlackWebhook;
 use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Client\Response;
@@ -20,16 +21,16 @@ class SlackChannel implements ChannelContract
         return true;
     }
 
-    public function enqueue(Pool $pool, NotificationPayload $payload): bool
+    public function enqueue(Pool $pool, NotificationPayload $payload): ?ResultadoEnvio
     {
         $pool->as(static::key())
             ->timeout(5)
             ->post(SlackWebhook::url($payload->nivel), SlackWebhook::body($payload->nivel, $payload->sistema, $payload->mensaje));
 
-        return true;
+        return null;
     }
 
-    public function handleResponse(NotificationPayload $payload, Response|\Throwable $response): void
+    public function handleResponse(NotificationPayload $payload, Response|\Throwable $response): ResultadoEnvio
     {
         if ($response instanceof \Throwable) {
             Log::warning('Chasqui [Slack]: excepción al enviar.', [
@@ -37,7 +38,7 @@ class SlackChannel implements ChannelContract
                 'error'   => $response->getMessage(),
             ]);
 
-            return;
+            return ResultadoEnvio::fallido($response->getMessage());
         }
 
         if ($response->failed()) {
@@ -45,7 +46,11 @@ class SlackChannel implements ChannelContract
                 'sistema' => $payload->sistema,
                 'status'  => $response->status(),
             ]);
+
+            return ResultadoEnvio::fallido('Respuesta HTTP ' . $response->status(), $response->status());
         }
+
+        return ResultadoEnvio::enviado($response->status());
     }
 
     public static function rules(): array
